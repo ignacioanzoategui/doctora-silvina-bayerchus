@@ -185,10 +185,12 @@ const firebaseConfig = {
   measurementId: "G-G97RBS7TW1"
 };
 
+// NUMERO DE WHATSAPP BUSINESS DE LA DOCTORA
+const DOCTOR_PHONE = "5491144058910"; 
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// DEFINICIÓN DE HORARIOS
 const slotsByDay = {
   wed: {
     label: "Miércoles",
@@ -206,22 +208,20 @@ let currentBookings = [];
 let selected = null;
 let availableDates = [];
 
-// Genera las fechas disponibles para los próximos 60 días (Miércoles y Viernes)
 function generateAvailableDates() {
   const dates = [];
   const today = new Date();
   const maxDate = new Date();
-  maxDate.setDate(today.getDate() + 60); // 60 días hacia adelante
+  maxDate.setDate(today.getDate() + 60);
 
   let cursor = new Date(today);
   while (cursor <= maxDate) {
-    const dayOfWeek = cursor.getDay(); // 3 = Miércoles, 5 = Viernes
+    const dayOfWeek = cursor.getDay();
     if (dayOfWeek === 3 || dayOfWeek === 5) {
       const year = cursor.getFullYear();
       const month = String(cursor.getMonth() + 1).padStart(2, '0');
       const day = String(cursor.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
-      
       const dayName = dayOfWeek === 3 ? "Miércoles" : "Viernes";
       const formattedLabel = `${dayName} ${day}/${month}/${year}`;
       
@@ -236,7 +236,6 @@ function generateAvailableDates() {
   return dates;
 }
 
-// Cargar fechas en el selector
 function populateDateSelect() {
   const select = document.getElementById("date-select");
   select.innerHTML = '<option value="">-- Seleccionar una fecha --</option>';
@@ -249,7 +248,6 @@ function populateDateSelect() {
   });
 }
 
-// Escuchar cambios de turnos en tiempo real
 db.ref("turnos").on("value", (snapshot) => {
   const data = snapshot.val();
   currentBookings = [];
@@ -341,17 +339,24 @@ function confirmBooking(){
     return;
   }
 
-  db.ref("turnos").push().set({
+  const newBooking = {
     dateStr: selected.dateStr,
     dateLabel: selected.dateLabel,
     time: selected.time,
     patient,
     phone
-  }, (err) => {
+  };
+
+  db.ref("turnos").push().set(newBooking, (err) => {
     if(err){
-      alert("Ocurrió un error al guardar la reserva. Verificá las reglas de Firebase.");
+      alert("Ocurrió un error al guardar la reserva.");
     } else {
-      alert(`✅ Turno reservado exitosamente para ${patient}.`);
+      alert(`✅ Turno reservado exitosamente para ${patient}.\n\nSe abrirá WhatsApp para enviar la confirmación a la Dra.`);
+      
+      // Abrir WhatsApp con la notificación de reserva
+      const text = encodeURIComponent(`Hola Dra. Silvina, acabo de reservar un turno para ${patient}.\n📅 Fecha: ${selected.dateLabel}\n⏰ Hora: ${selected.time} hs\n📱 Mi WhatsApp: ${phone}`);
+      window.open(`https://wa.me/${DOCTOR_PHONE}?text=${text}`, '_blank');
+
       document.getElementById("patient").value = "";
       document.getElementById("phone").value = "";
       closeBooking();
@@ -386,7 +391,6 @@ function renderAgenda(){
     agenda.innerHTML = "<p style='color:var(--muted)'>No hay turnos reservados.</p>";
     return;
   }
-  // Ordenar reservas por fecha
   const sorted = [...currentBookings].sort((a,b) => (a.dateStr + a.time).localeCompare(b.dateStr + b.time));
   agenda.innerHTML = sorted.map((b) => `
     <div class="turno">
@@ -431,8 +435,17 @@ function searchPatientBookings(){
 }
 
 function cancelBooking(id){
+  const booking = currentBookings.find(b => b.id === id);
+  if(!booking) return;
+
   if(confirm("¿Confirmás la cancelación del turno?")){
     db.ref("turnos/" + id).remove().then(() => {
+      alert("El turno ha sido cancelado. Se abrirá WhatsApp para avisar a la Dra.");
+      
+      // Abrir WhatsApp notificando la cancelación
+      const text = encodeURIComponent(`Hola Dra. Silvina, cancelé el turno de ${booking.patient}.\n📅 Fecha: ${booking.dateLabel}\n⏰ Hora: ${booking.time} hs`);
+      window.open(`https://wa.me/${DOCTOR_PHONE}?text=${text}`, '_blank');
+
       if(document.getElementById("patient-results").style.display === "block"){
         searchPatientBookings();
       }
