@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dra. Silvina Bayerchus | Pediatría</title>
+
+<!-- Scripts de Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 <style>
 :root{
   --ink:#18324a; --muted:#607587; --paper:#f7fbfc; --card:#fff;
@@ -21,17 +26,9 @@ header{background:linear-gradient(135deg,#eaf7f7,#f8fbff);border-bottom:2px soli
 .badge{font-size:14px;color:var(--muted)}
 
 .btn-mis-turnos{
-  background: var(--ink);
-  color: #fff;
-  border: 2px solid var(--ink);
-  border-radius: 14px;
-  padding: 12px 20px;
-  font-weight: 800;
-  font-size: 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  background: var(--ink); color: #fff; border: 2px solid var(--ink);
+  border-radius: 14px; padding: 12px 20px; font-weight: 800; font-size: 18px;
+  cursor: pointer; display: flex; align-items: center; gap: 8px;
   box-shadow: 0 4px 12px rgba(24, 50, 74, 0.15);
 }
 .btn-mis-turnos:hover{background:#234768}
@@ -58,7 +55,6 @@ input{width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;fo
 button{border:0;border-radius:12px;padding:14px 18px;font-weight:800;font-size:16px;cursor:pointer}
 .primary{background:var(--ink);color:#fff}.secondary{background:#eef4f6;color:var(--ink)}
 
-/* Modales */
 .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:none;justify-content:center;align-items:center;z-index:1000}
 .modal-overlay.show{display:flex}
 .modal-content{background:#fff;border-radius:20px;padding:28px;max-width:520px;width:92%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,0.2)}
@@ -145,14 +141,12 @@ footer{padding:35px 0;color:var(--muted);font-size:14px}
       <h3 style="margin:0;font-size:22px">Acceso Doctora</h3>
       <button class="secondary" onclick="closeDoctorModal()">✕</button>
     </div>
-    
     <div id="login-form">
       <label for="password">Ingresá la contraseña</label>
       <input id="password" type="password" placeholder="Contraseña">
       <button class="primary" style="margin-top:14px;width:100%" onclick="loginDoctor()">Ingresar</button>
       <div id="login-msg" style="color:var(--danger);margin-top:10px"></div>
     </div>
-
     <div id="doctor-panel" style="display:none">
       <h4 style="font-size:18px;margin-bottom:12px">Agenda completa de pacientes</h4>
       <div id="agenda"></div>
@@ -167,13 +161,11 @@ footer{padding:35px 0;color:var(--muted);font-size:14px}
       <h3 style="margin:0;font-size:24px">📅 Mis Turnos</h3>
       <button class="secondary" style="font-size:18px;padding:8px 14px" onclick="closeMyBookingsModal()">✕</button>
     </div>
-    
     <div>
       <label for="search-phone" style="font-size:16px">Ingresá tu número de WhatsApp para consultar tu reserva:</label>
       <input id="search-phone" placeholder="Ej. 11 5555 5555">
       <button class="primary" style="margin-top:14px;width:100%;font-size:18px" onclick="searchPatientBookings()">Buscar mis turnos</button>
     </div>
-
     <div id="patient-results" style="margin-top:24px;display:none">
       <h4 style="font-size:18px;margin-bottom:10px">Tus reservas registradas:</h4>
       <div id="patient-list"></div>
@@ -184,20 +176,42 @@ footer{padding:35px 0;color:var(--muted);font-size:14px}
 <footer><div class="wrap">Dra. Silvina Bayerchus · Pediatría · Adrogué</div></footer>
 
 <script>
+// PEGAR AQUÍ TUS CLAVES DE FIREBASE
+const firebaseConfig = {
+  apiKey: "AIzaSyDOU4p49VFuDGrZ9oyIXRHSfV7wDdnT5pY",
+  authDomain: "reserva-turnos-69a97.firebaseapp.com",
+  projectId: "reserva-turnos-69a97",
+  storageBucket: "reserva-turnos-69a97.firebasestorage.app",
+  messagingSenderId: "950152100333",
+  appId: "1:950152100333:web:82473d21e8906c1443cfe4",
+  measurementId: "G-G97RBS7TW1"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
 const slots = {
   wed:["08:30","09:00","09:30","10:00","10:30","11:00"],
   fri:["12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30"]
 };
 
+let currentBookings = [];
 let selected = null;
 
-function getBookings(){
-  return JSON.parse(localStorage.getItem("silvina_bookings") || "[]");
-}
-
-function saveBookings(bookings){
-  localStorage.setItem("silvina_bookings", JSON.stringify(bookings));
-}
+// Escuchar cambios de turnos en tiempo real
+db.ref("turnos").on("value", (snapshot) => {
+  const data = snapshot.val();
+  currentBookings = [];
+  if(data){
+    Object.keys(data).forEach(key => {
+      currentBookings.push({ id: key, ...data[key] });
+    });
+  }
+  render();
+  if(document.getElementById("doctor-panel").style.display === "block"){
+    renderAgenda();
+  }
+});
 
 function showBookingArea(e){
   if(e) e.preventDefault();
@@ -208,19 +222,17 @@ function showBookingArea(e){
 }
 
 function hideBookingArea(){
-  const area = document.getElementById("turnos");
-  area.style.display = "none";
+  document.getElementById("turnos").style.display = "none";
   closeBooking();
 }
 
 function render(){
-  const bookings = getBookings();
   for(const [day,arr] of Object.entries(slots)){
     const el = document.getElementById(day); 
     if(!el) continue;
     el.innerHTML = "";
     arr.forEach(time => {
-      const isReserved = bookings.some(x => x.day === day && x.time === time);
+      const isReserved = currentBookings.some(x => x.day === day && x.time === time);
       const btn = document.createElement("button");
       btn.className = "time" + (isReserved ? " busy" : "");
       btn.textContent = isReserved ? "Reservado" : time;
@@ -245,7 +257,6 @@ function closeBooking(){
 
 function confirmBooking(){
   if(!selected) return;
-
   const patient = document.getElementById("patient").value.trim();
   const phone = document.getElementById("phone").value.trim();
   if(!patient || !phone){
@@ -253,38 +264,30 @@ function confirmBooking(){
     return;
   }
   
-  const bookings = getBookings();
-  const alreadyBooked = bookings.some(b => b.day === selected.day && b.time === selected.time);
-  
+  const alreadyBooked = currentBookings.some(b => b.day === selected.day && b.time === selected.time);
   if(alreadyBooked){
-    alert("Este horario ya se encuentra reservado.");
+    alert("Este horario acaba de ser reservado.");
     hideBookingArea();
     return;
   }
-  
-  bookings.push({
-    id: Date.now().toString(),
+
+  db.ref("turnos").push().set({
     day: selected.day,
     time: selected.time,
     dayLabel: selected.dayLabel,
     patient,
     phone
+  }, (err) => {
+    if(!err){
+      alert(`✅ Turno reservado exitosamente para ${patient}.`);
+      document.getElementById("patient").value = "";
+      document.getElementById("phone").value = "";
+      hideBookingArea();
+    }
   });
-
-  saveBookings(bookings);
-  alert(`✅ Turno reservado exitosamente para ${patient} (${selected.dayLabel} a las ${selected.time}).`);
-
-  document.getElementById("patient").value = "";
-  document.getElementById("phone").value = "";
-  
-  hideBookingArea();
 }
 
-/* Modal Doctora */
-function openDoctorModal(){
-  document.getElementById("doctorModal").classList.add("show");
-}
-
+function openDoctorModal(){ document.getElementById("doctorModal").classList.add("show"); }
 function closeDoctorModal(){
   document.getElementById("doctorModal").classList.remove("show");
   document.getElementById("password").value = "";
@@ -294,8 +297,7 @@ function closeDoctorModal(){
 }
 
 function loginDoctor(){
-  const password = document.getElementById("password").value;
-  if(password === "poro1308"){
+  if(document.getElementById("password").value === "poro1308"){
     document.getElementById("login-form").style.display = "none";
     document.getElementById("doctor-panel").style.display = "block";
     renderAgenda();
@@ -307,38 +309,22 @@ function loginDoctor(){
 function renderAgenda(){
   const agenda = document.getElementById("agenda");
   if(!agenda) return;
-  const bookings = getBookings();
-  
-  if(!bookings.length){
-    agenda.innerHTML = "<p style='color:var(--muted)'>No hay turnos reservados todavía.</p>";
+  if(!currentBookings.length){
+    agenda.innerHTML = "<p style='color:var(--muted)'>No hay turnos reservados.</p>";
     return;
   }
-  
-  agenda.innerHTML = bookings.map((b) => `
+  agenda.innerHTML = currentBookings.map((b) => `
     <div class="turno">
       <div>
         <strong>${b.dayLabel} · ${b.time} hs</strong><br>
         <span>Paciente: ${escapeHtml(b.patient)}</span><br>
         <small style="color:var(--muted)">WhatsApp: ${escapeHtml(b.phone)}</small>
       </div>
-      <button class="cancel" onclick="cancelBookingDoctor('${b.id}')">Cancelar</button>
+      <button class="cancel" onclick="cancelBooking('${b.id}')">Cancelar</button>
     </div>`).join("");
 }
 
-function cancelBookingDoctor(id){
-  if(confirm("¿Confirmás que querés cancelar este turno?")){
-    let bookings = getBookings().filter(b => b.id !== id);
-    saveBookings(bookings);
-    renderAgenda();
-    render(); // Actualiza la grilla de turnos principales
-  }
-}
-
-/* Modal Mis Turnos */
-function openMyBookingsModal(){
-  document.getElementById("myBookingsModal").classList.add("show");
-}
-
+function openMyBookingsModal(){ document.getElementById("myBookingsModal").classList.add("show"); }
 function closeMyBookingsModal(){
   document.getElementById("myBookingsModal").classList.remove("show");
   document.getElementById("search-phone").value = "";
@@ -348,43 +334,34 @@ function closeMyBookingsModal(){
 
 function searchPatientBookings(){
   const phoneInput = document.getElementById("search-phone").value.trim();
-  if(!phoneInput) { 
-    alert("Por favor ingresá tu número de WhatsApp."); 
-    return; 
-  }
-
+  if(!phoneInput) return alert("Ingresá tu WhatsApp.");
+  const cleanPhone = phoneInput.replace(/\D/g, "");
+  const found = currentBookings.filter(b => b.phone.replace(/\D/g, "").includes(cleanPhone));
   const resultsDiv = document.getElementById("patient-results");
   const listDiv = document.getElementById("patient-list");
   
-  const cleanPhone = phoneInput.replace(/\D/g, "");
-  const bookings = getBookings();
-  
-  const found = bookings.filter(b => b.phone.replace(/\D/g, "").includes(cleanPhone));
-
   resultsDiv.style.display = "block";
-
-  if(!found.length) {
-    listDiv.innerHTML = "<p style='color:var(--muted);font-size:16px'>No encontramos reservas activas asociadas a ese número.</p>";
+  if(!found.length){
+    listDiv.innerHTML = "<p style='color:var(--muted)'>No hay reservas activas con ese número.</p>";
     return;
   }
-
   listDiv.innerHTML = found.map(b => `
     <div class="turno">
       <div>
-        <strong style="font-size:17px">${b.dayLabel} a las ${b.time} hs</strong><br>
-        <span style="font-size:15px;color:var(--muted)">Paciente: ${escapeHtml(b.patient)}</span>
+        <strong>${b.dayLabel} a las ${b.time} hs</strong><br>
+        <span style="color:var(--muted)">Paciente: ${escapeHtml(b.patient)}</span>
       </div>
-      <button class="cancel" onclick="cancelBookingPatient('${b.id}')">Cancelar turno</button>
-    </div>
-  `).join("");
+      <button class="cancel" onclick="cancelBooking('${b.id}')">Cancelar turno</button>
+    </div>`).join("");
 }
 
-function cancelBookingPatient(id){
-  if(confirm("¿Confirmás que querés cancelar este turno?")){
-    let bookings = getBookings().filter(b => b.id !== id);
-    saveBookings(bookings);
-    searchPatientBookings();
-    render(); // Actualiza la grilla de turnos principales
+function cancelBooking(id){
+  if(confirm("¿Confirmás la cancelación del turno?")){
+    db.ref("turnos/" + id).remove().then(() => {
+      if(document.getElementById("patient-results").style.display === "block"){
+        searchPatientBookings();
+      }
+    });
   }
 }
 
