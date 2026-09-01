@@ -351,16 +351,9 @@ function confirmBooking(){
     if(err){
       alert("Ocurrió un error al guardar la reserva.");
     } else {
-      alert(`✅ Turno reservado exitosamente para ${patient}.\n\nSe abrirá WhatsApp para enviar la confirmación a la Dra.`);
-      
-      // Abrir WhatsApp con la notificación de reserva
+      // Redirección directa para evitar el bloqueo de ventanas emergentes en móviles
       const text = encodeURIComponent(`Hola Dra. Silvina, acabo de reservar un turno para ${patient}.\n📅 Fecha: ${selected.dateLabel}\n⏰ Hora: ${selected.time} hs\n📱 Mi WhatsApp: ${phone}`);
-      window.open(`https://wa.me/${DOCTOR_PHONE}?text=${text}`, '_blank');
-
-      document.getElementById("patient").value = "";
-      document.getElementById("phone").value = "";
-      closeBooking();
-      document.getElementById("turnos").style.display = "none";
+      window.location.href = `https://wa.me/${DOCTOR_PHONE}?text=${text}`;
     }
   });
 }
@@ -399,7 +392,7 @@ function renderAgenda(){
         <span>Paciente: ${escapeHtml(b.patient)}</span><br>
         <small style="color:var(--muted)">WhatsApp: ${escapeHtml(b.phone)}</small>
       </div>
-      <button class="cancel" onclick="cancelBooking('${b.id}')">Cancelar</button>
+      <button class="cancel" onclick="cancelBooking('${b.id}', true)">Cancelar</button>
     </div>`).join("");
 }
 
@@ -430,21 +423,22 @@ function searchPatientBookings(){
         <strong>${b.dateLabel} a las ${b.time} hs</strong><br>
         <span style="color:var(--muted)">Paciente: ${escapeHtml(b.patient)}</span>
       </div>
-      <button class="cancel" onclick="cancelBooking('${b.id}')">Cancelar turno</button>
+      <button class="cancel" onclick="cancelBooking('${b.id}', false)">Cancelar turno</button>
     </div>`).join("");
 }
 
-function cancelBooking(id){
+function cancelBooking(id, isDoctor = false){
   const booking = currentBookings.find(b => b.id === id);
   if(!booking) return;
 
   if(confirm("¿Confirmás la cancelación del turno?")){
     db.ref("turnos/" + id).remove().then(() => {
-      alert("El turno ha sido cancelado. Se abrirá WhatsApp para avisar a la Dra.");
-      
-      // Abrir WhatsApp notificando la cancelación
-      const text = encodeURIComponent(`Hola Dra. Silvina, cancelé el turno de ${booking.patient}.\n📅 Fecha: ${booking.dateLabel}\n⏰ Hora: ${booking.time} hs`);
-      window.open(`https://wa.me/${DOCTOR_PHONE}?text=${text}`, '_blank');
+      if(isDoctor){
+        alert("El turno ha sido eliminado correctamente de la agenda.");
+      } else {
+        const text = encodeURIComponent(`Hola Dra. Silvina, cancelé el turno de ${booking.patient}.\n📅 Fecha: ${booking.dateLabel}\n⏰ Hora: ${booking.time} hs`);
+        window.location.href = `https://wa.me/${DOCTOR_PHONE}?text=${text}`;
+      }
 
       if(document.getElementById("patient-results").style.display === "block"){
         searchPatientBookings();
