@@ -41,17 +41,16 @@ header{background:linear-gradient(135deg,#eaf7f7,#f8fbff);border-bottom:2px soli
 .section{padding:36px 0}
 .section h2{font-size:30px;margin:0 0 8px}
 .sub{color:var(--muted);margin-top:0}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px}
 .day{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}
 .day strong{font-size:20px}.day span{font-size:14px;color:var(--muted)}
-.times{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.times{display:grid;grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));gap:10px}
 .time{border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px;text-align:center;font-size:16px;font-weight:700;cursor:pointer}
 .time:hover{border-color:var(--accent)} 
 .time.busy{background:#f1f3f4;color:#9aa5aa;cursor:not-allowed;text-decoration:line-through;border-color:#e0e0e0}
 .form{margin-top:20px;display:none}.form.show{display:block}
 label{display:block;font-size:15px;font-weight:700;margin:14px 0 6px}
-input{width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;font-size:17px}
+input, select{width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;font-size:17px;background:#fff}
 button{border:0;border-radius:12px;padding:14px 18px;font-weight:800;font-size:16px;cursor:pointer}
 .primary{background:var(--ink);color:#fff}.secondary{background:#eef4f6;color:var(--ink)}
 
@@ -65,9 +64,7 @@ button{border:0;border-radius:12px;padding:14px 18px;font-weight:800;font-size:1
 
 footer{padding:35px 0;color:var(--muted);font-size:14px}
 @media(max-width:760px){
-  .hero,.grid{grid-template-columns:1fr}
-  .hero{padding-top:20px}
-  .times{grid-template-columns:repeat(2,1fr)}
+  .hero{grid-template-columns:1fr;padding-top:20px}
   .badge-sub{display:none}
 }
 </style>
@@ -95,7 +92,7 @@ footer{padding:35px 0;color:var(--muted);font-size:14px}
   <div>
     <div class="badge">PEDIATRÍA · ADROGUÉ</div>
     <h1>Turnos pediátricos,<br>más simples.</h1>
-    <p>Reservá un turno para tu hijo o hija de forma rápida. Elegí el día y horario disponible y recibí la confirmación.</p>
+    <p>Reservá un turno para tu hijo o hija de forma rápida. Elegí la fecha y horario disponible.</p>
     <a class="cta" href="#turnos" onclick="showBookingArea(event)">Reservar un turno</a>
   </div>
   <div class="info">
@@ -107,17 +104,18 @@ footer{padding:35px 0;color:var(--muted);font-size:14px}
 
 <section id="turnos" class="section wrap" style="display:none">
   <h2>Reservar un turno</h2>
-  <p class="sub">Elegí un día y después un horario disponible.</p>
+  <p class="sub">Elegí una fecha para ver los horarios disponibles.</p>
 
-  <div class="grid">
-    <div class="card">
-      <div class="day"><strong>Miércoles</strong><span>08:30 a 11:00</span></div>
-      <div class="times" id="wed"></div>
-    </div>
-    <div class="card">
-      <div class="day"><strong>Viernes</strong><span>12:00 a 15:30</span></div>
-      <div class="times" id="fri"></div>
-    </div>
+  <div class="card" style="margin-bottom:20px">
+    <label for="date-select" style="margin-top:0">Seleccionar fecha de atención (Miércoles o Viernes):</label>
+    <select id="date-select" onchange="onDateChange()">
+      <option value="">-- Seleccionar una fecha --</option>
+    </select>
+  </div>
+
+  <div id="slots-container" class="card" style="display:none">
+    <div class="day"><strong id="selected-day-label">--</strong><span id="selected-day-hours">--</span></div>
+    <div class="times" id="times-grid"></div>
   </div>
 
   <div id="booking" class="card form">
@@ -190,13 +188,66 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const slots = {
-  wed:["08:30","09:00","09:30","10:00","10:30","11:00"],
-  fri:["12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30"]
+// DEFINICIÓN DE HORARIOS
+const slotsByDay = {
+  wed: {
+    label: "Miércoles",
+    hours: "08:30 a 12:00",
+    times: ["08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00"]
+  },
+  fri: {
+    label: "Viernes",
+    hours: "12:00 a 15:30",
+    times: ["12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30"]
+  }
 };
 
 let currentBookings = [];
 let selected = null;
+let availableDates = [];
+
+// Genera las fechas disponibles para los próximos 60 días (Miércoles y Viernes)
+function generateAvailableDates() {
+  const dates = [];
+  const today = new Date();
+  const maxDate = new Date();
+  maxDate.setDate(today.getDate() + 60); // 60 días hacia adelante
+
+  let cursor = new Date(today);
+  while (cursor <= maxDate) {
+    const dayOfWeek = cursor.getDay(); // 3 = Miércoles, 5 = Viernes
+    if (dayOfWeek === 3 || dayOfWeek === 5) {
+      const year = cursor.getFullYear();
+      const month = String(cursor.getMonth() + 1).padStart(2, '0');
+      const day = String(cursor.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      
+      const dayName = dayOfWeek === 3 ? "Miércoles" : "Viernes";
+      const formattedLabel = `${dayName} ${day}/${month}/${year}`;
+      
+      dates.push({
+        dateStr,
+        label: formattedLabel,
+        dayKey: dayOfWeek === 3 ? "wed" : "fri"
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+}
+
+// Cargar fechas en el selector
+function populateDateSelect() {
+  const select = document.getElementById("date-select");
+  select.innerHTML = '<option value="">-- Seleccionar una fecha --</option>';
+  availableDates = generateAvailableDates();
+  availableDates.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.dateStr;
+    opt.textContent = d.label;
+    select.appendChild(opt);
+  });
+}
 
 // Escuchar cambios de turnos en tiempo real
 db.ref("turnos").on("value", (snapshot) => {
@@ -207,7 +258,7 @@ db.ref("turnos").on("value", (snapshot) => {
       currentBookings.push({ id: key, ...data[key] });
     });
   }
-  render();
+  renderSlots();
   if(document.getElementById("doctor-panel").style.display === "block"){
     renderAgenda();
   }
@@ -215,37 +266,55 @@ db.ref("turnos").on("value", (snapshot) => {
 
 function showBookingArea(e){
   if(e) e.preventDefault();
+  populateDateSelect();
   const area = document.getElementById("turnos");
   area.style.display = "block";
-  render();
   area.scrollIntoView({behavior:"smooth"});
 }
 
-function hideBookingArea(){
-  document.getElementById("turnos").style.display = "none";
+function onDateChange() {
   closeBooking();
+  renderSlots();
 }
 
-function render(){
-  for(const [day,arr] of Object.entries(slots)){
-    const el = document.getElementById(day); 
-    if(!el) continue;
-    el.innerHTML = "";
-    arr.forEach(time => {
-      const isReserved = currentBookings.some(x => x.day === day && x.time === time);
-      const btn = document.createElement("button");
-      btn.className = "time" + (isReserved ? " busy" : "");
-      btn.textContent = isReserved ? "Reservado" : time;
-      btn.disabled = isReserved;
-      if(!isReserved) btn.onclick = () => openBooking(day, time);
-      el.appendChild(btn);
-    });
+function renderSlots() {
+  const select = document.getElementById("date-select");
+  const container = document.getElementById("slots-container");
+  const selectedDateStr = select.value;
+
+  if(!selectedDateStr) {
+    container.style.display = "none";
+    return;
   }
+
+  const dateObj = availableDates.find(d => d.dateStr === selectedDateStr);
+  if(!dateObj) return;
+
+  const dayInfo = slotsByDay[dateObj.dayKey];
+  document.getElementById("selected-day-label").textContent = dateObj.label;
+  document.getElementById("selected-day-hours").textContent = dayInfo.hours;
+
+  const grid = document.getElementById("times-grid");
+  grid.innerHTML = "";
+
+  dayInfo.times.forEach(time => {
+    const isReserved = currentBookings.some(x => x.dateStr === selectedDateStr && x.time === time);
+    const btn = document.createElement("button");
+    btn.className = "time" + (isReserved ? " busy" : "");
+    btn.textContent = isReserved ? "Reservado" : time;
+    btn.disabled = isReserved;
+    if(!isReserved) {
+      btn.onclick = () => openBooking(dateObj.dateStr, dateObj.label, time);
+    }
+    grid.appendChild(btn);
+  });
+
+  container.style.display = "block";
 }
 
-function openBooking(day, time){
-  selected = {day, time, dayLabel: day === "wed" ? "Miércoles" : "Viernes"};
-  document.getElementById("chosen").textContent = `Confirmar: ${selected.dayLabel} a las ${time}`;
+function openBooking(dateStr, dateLabel, time){
+  selected = { dateStr, dateLabel, time };
+  document.getElementById("chosen").textContent = `Confirmar: ${dateLabel} a las ${time} hs`;
   document.getElementById("booking").classList.add("show");
   document.getElementById("patient").focus();
 }
@@ -264,25 +333,29 @@ function confirmBooking(){
     return;
   }
   
-  const alreadyBooked = currentBookings.some(b => b.day === selected.day && b.time === selected.time);
+  const alreadyBooked = currentBookings.some(b => b.dateStr === selected.dateStr && b.time === selected.time);
   if(alreadyBooked){
     alert("Este horario acaba de ser reservado.");
-    hideBookingArea();
+    renderSlots();
+    closeBooking();
     return;
   }
 
   db.ref("turnos").push().set({
-    day: selected.day,
+    dateStr: selected.dateStr,
+    dateLabel: selected.dateLabel,
     time: selected.time,
-    dayLabel: selected.dayLabel,
     patient,
     phone
   }, (err) => {
-    if(!err){
+    if(err){
+      alert("Ocurrió un error al guardar la reserva. Verificá las reglas de Firebase.");
+    } else {
       alert(`✅ Turno reservado exitosamente para ${patient}.`);
       document.getElementById("patient").value = "";
       document.getElementById("phone").value = "";
-      hideBookingArea();
+      closeBooking();
+      document.getElementById("turnos").style.display = "none";
     }
   });
 }
@@ -313,10 +386,12 @@ function renderAgenda(){
     agenda.innerHTML = "<p style='color:var(--muted)'>No hay turnos reservados.</p>";
     return;
   }
-  agenda.innerHTML = currentBookings.map((b) => `
+  // Ordenar reservas por fecha
+  const sorted = [...currentBookings].sort((a,b) => (a.dateStr + a.time).localeCompare(b.dateStr + b.time));
+  agenda.innerHTML = sorted.map((b) => `
     <div class="turno">
       <div>
-        <strong>${b.dayLabel} · ${b.time} hs</strong><br>
+        <strong>${b.dateLabel} · ${b.time} hs</strong><br>
         <span>Paciente: ${escapeHtml(b.patient)}</span><br>
         <small style="color:var(--muted)">WhatsApp: ${escapeHtml(b.phone)}</small>
       </div>
@@ -348,7 +423,7 @@ function searchPatientBookings(){
   listDiv.innerHTML = found.map(b => `
     <div class="turno">
       <div>
-        <strong>${b.dayLabel} a las ${b.time} hs</strong><br>
+        <strong>${b.dateLabel} a las ${b.time} hs</strong><br>
         <span style="color:var(--muted)">Paciente: ${escapeHtml(b.patient)}</span>
       </div>
       <button class="cancel" onclick="cancelBooking('${b.id}')">Cancelar turno</button>
